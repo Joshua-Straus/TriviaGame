@@ -25,7 +25,7 @@ export function ColorPicker({ color, label, open, onToggle, onClose, onChange }:
   return <div className="color-picker" ref={rootRef}>
     <button ref={triggerRef} type="button" className="color-trigger" aria-label={`${label} color`} aria-haspopup="dialog" aria-expanded={open} onClick={onToggle} style={{ '--swatch': color } as React.CSSProperties}><span /></button>
     {open && <div className="color-popover" role="dialog" aria-label={`${label} color palette`}>
-      <div className="swatch-grid">{PALETTE.map((value) => <button key={value} type="button" aria-label={`Select ${value}`} aria-pressed={value.toLowerCase() === color.toLowerCase()} style={{ '--swatch': value } as React.CSSProperties} onClick={() => choose(value)}><span /></button>)}</div>
+      <div className="swatch-grid">{PALETTE.map((value) => <button key={value} type="button" className={value.toLowerCase() === color.toLowerCase() ? 'selected' : undefined} aria-label={`Select ${value}`} aria-pressed={value.toLowerCase() === color.toLowerCase()} style={{ '--swatch': value } as React.CSSProperties} onClick={() => choose(value)}><span /></button>)}</div>
       <label>Custom hex<div className="hex-row"><input value={draft} maxLength={7} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && valid) choose(draft); }} aria-invalid={!valid} /><button type="button" disabled={!valid} onClick={() => choose(draft)}>Apply</button></div></label>
     </div>}
   </div>;
