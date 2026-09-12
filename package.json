@@ -1,0 +1,42 @@
+{
+  "name": "living-room-trivia",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n SERVER,WEB -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite --host 0.0.0.0",
+    "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",
+    "start": "NODE_ENV=production node server-dist/server/index.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "express": "latest",
+    "qrcode.react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "socket.io": "latest",
+    "socket.io-client": "latest"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "concurrently": "latest",
+    "jsdom": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}
