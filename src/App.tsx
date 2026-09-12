@@ -46,7 +46,7 @@ function controllerDetails(): { role: ControllerRole; token: string } | null {
   const params = new URLSearchParams(window.location.search);
   const role = params.get('role') ?? params.get('team');
   const token = params.get('token');
-  return (role === 'solo' || role === 'one' || role === 'two') && token ? { role, token } : null;
+  return (role === 'solo' || role === 'one' || role === 'two' || role === 'individual') && token ? { role, token } : null;
 }
 
 export function App() {
