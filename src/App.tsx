@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type {
   ControllerInvite,
@@ -9,7 +9,7 @@ import type {
   SafeQuestion,
   TeamId,
 } from '../shared/types';
-import { emitWithAck, socket } from './socket';
+import { emitWithAck, socket, socketTarget } from './socket';
 import { TeamSpinner } from './Spinner';
 import { parseQuestionCountDraft } from './settings';
 import { ColorPicker } from './ColorPicker';
@@ -42,8 +42,8 @@ function loadDeviceId(): string {
   return created;
 }
 
-function controllerDetails(): { role: ControllerRole; token: string } | null {
-  const params = new URLSearchParams(window.location.search);
+export function controllerDetails(search = window.location.search): { role: ControllerRole; token: string } | null {
+  const params = new URLSearchParams(search);
   const role = params.get('role') ?? params.get('team');
   const token = params.get('token');
   return (role === 'solo' || role === 'one' || role === 'two' || role === 'individual') && token ? { role, token } : null;
@@ -153,7 +153,7 @@ function HostApp() {
   };
 
   const exitGame = async () => {
-    const active = ['question', 'answering', 'steal', 'resolved', 'paused'].includes(state?.phase ?? '');
+    const active = ['question', 'buzz_locked', 'answering', 'steal', 'resolved', 'paused'].includes(state?.phase ?? '');
     if (active && !window.confirm('Exit this game and return to setup? Current progress will be lost.')) return;
     await action((ack) => socket.emit('host:reset', ack));
     setInvites([]);
@@ -393,28 +393,40 @@ function ControllerApp({ role, token }: { role: ControllerRole; token: string })
   const [joining, setJoining] = useState(false);
   const [hasSkipVote, setHasSkipVote] = useState(false);
   const [error, setError] = useState('');
+  const [connectionError, setConnectionError] = useState('');
   const [deviceId] = useState(loadDeviceId);
   const storageKey = `trivia-controller:${role}:${token}`;
+  const joinRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     const join = () => {
       const reconnectToken = localStorage.getItem(storageKey) ?? undefined;
       if (role === 'individual' && !reconnectToken) return;
       setJoining(true);
+      setConnectionError('');
       emitWithAck<ControllerSession>((ack) => socket.emit('controller:join', { role, token, deviceId, reconnectToken }, ack))
-        .then((joinedSession) => { localStorage.setItem(storageKey, joinedSession.reconnectToken); setSession(joinedSession); setError(''); })
-        .catch((caught) => { if (reconnectToken) localStorage.removeItem(storageKey); setError(caught instanceof Error ? caught.message : 'Unable to join.'); })
+        .then((joinedSession) => { localStorage.setItem(storageKey, joinedSession.reconnectToken); setSession(joinedSession); setError(''); setConnectionError(''); })
+        .catch((caught) => { if (reconnectToken) localStorage.removeItem(storageKey); const message = caught instanceof Error ? caught.message : 'Unable to join.'; setError(message); setConnectionError(message); })
         .finally(() => setJoining(false));
     };
+    joinRef.current = join;
     socket.on('connect', join);
     if (socket.connected) join();
-    return () => { socket.off('connect', join); };
+    const onConnectError = (caught: Error) => setConnectionError(caught.message || 'Unable to reach the game server.');
+    const onDisconnect = (reason: string) => setConnectionError(`Disconnected from the game server (${reason}).`);
+    // Socket.IO emits `connect` after a successful reconnect; keep this event
+    // for diagnostics without issuing a duplicate idempotent registration.
+    const onReconnect = () => setConnectionError('');
+    socket.on('connect_error', onConnectError);
+    socket.on('disconnect', onDisconnect);
+    socket.io.on('reconnect', onReconnect);
+    return () => { socket.off('connect', join); socket.off('connect_error', onConnectError); socket.off('disconnect', onDisconnect); socket.io.off('reconnect', onReconnect); };
   }, [role, token, storageKey, deviceId]);
 
   useEffect(() => { setHasSkipVote(false); }, [state?.question?.id]);
 
   const registerIndividual = async () => {
-    setJoining(true); setError('');
+    setJoining(true); setError(''); setConnectionError('');
     try {
       const joinedSession = await emitWithAck<ControllerSession>((ack) => socket.emit('controller:join', { role, token, deviceId, name: nameDraft }, ack));
       localStorage.setItem(storageKey, joinedSession.reconnectToken); setSession(joinedSession);
@@ -427,9 +439,16 @@ function ControllerApp({ role, token }: { role: ControllerRole; token: string })
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Action failed.'); }
   };
 
+  const retry = useCallback(() => {
+    setConnectionError(''); setError('');
+    socket.connect();
+    if (socket.connected) joinRef.current();
+  }, []);
+
+  if (connectionError || (error && !session && role !== 'individual')) return <ConnectionErrorScreen reason={connectionError || error} target={socketTarget} onRetry={retry} />;
   if (!state) return <LoadingScreen label="Connecting to the game…" />;
   if (role === 'individual' && !session) return <main className="controller-shell individual-join"><header><div className="brand-mark">?</div><div><small>Everyone for Themselves</small><strong>Join the game</strong></div></header><section className="join-form"><span className="eyebrow">Choose your player name</span><h1>What should we call you?</h1><p>Names must be unique. Your score stays secret until the final leaderboard.</p><label>Display name<input autoFocus value={nameDraft} maxLength={24} onChange={(event) => setNameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') registerIndividual(); }} /></label>{error && <div className="join-error">{error}</div>}<button className="primary" disabled={joining || !nameDraft.trim()} onClick={registerIndividual}>{joining ? 'Joining…' : 'Join game →'}</button></section></main>;
-  if (!session) return <LoadingScreen label={error || joining ? error || 'Joining your controller…' : 'Joining your controller…'} />;
+  if (!session) return <LoadingScreen label={joining ? 'Joining your controller…' : 'Connecting to your controller…'} />;
   const isSolo = role === 'solo';
   const isTeam = role === 'one' || role === 'two';
   const isIndividual = role === 'individual';
@@ -474,4 +493,8 @@ function Feedback({ status, score, detail }: { status: 'correct' | 'incorrect'; 
 
 function LoadingScreen({ label }: { label: string }) {
   return <main className="loading-screen"><div className="brand-mark">?</div><div className="loader" /><p>{label}</p></main>;
+}
+
+function ConnectionErrorScreen({ reason, target, onRetry }: { reason: string; target: string; onRetry: () => void }) {
+  return <main className="loading-screen connection-error" role="alert"><div className="brand-mark">!</div><h1>Can’t connect to the game</h1><p>{reason}</p><small>Trying: {target}</small><button className="primary" onClick={onRetry}>Retry</button></main>;
 }
