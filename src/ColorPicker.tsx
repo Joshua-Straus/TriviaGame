@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-const PALETTE = ['#8b5cf6', '#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#f43f5e', '#ec4899', '#a855f7'];
+const PALETTE = ['#9a348e', '#c0559f', '#7b2a72', '#1b9cc9', '#63d2ff', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#f43f5e'];
 
 export function ColorPicker({ color, label, open, onToggle, onClose, onChange }: {
   color: string; label: string; open: boolean; onToggle: () => void; onClose: () => void; onChange: (color: string) => void;

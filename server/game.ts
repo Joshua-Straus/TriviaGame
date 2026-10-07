@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { ControllerInvite, ControllerRole, ControllerSession, GamePhase, GameSettings, LeaderboardEntry, PublicGameState, StoredQuestion, TeamId } from '../shared/types.js';
+import type { ControllerInvite, Difficulty, ControllerRole, ControllerSession, GamePhase, GameSettings, LeaderboardEntry, PublicGameState, StoredQuestion, TeamId } from '../shared/types.js';
 
 const ROLES: ControllerRole[] = ['solo', 'one', 'two', 'individual'];
 const DEFAULT_TEAMS = {
-  one: { id: 'one' as const, name: 'Team Aurora', color: '#8b5cf6', score: 0, connected: false, controllerCount: 0, roster: [] },
-  two: { id: 'two' as const, name: 'Team Comet', color: '#14b8a6', score: 0, connected: false, controllerCount: 0, roster: [] },
+  one: { id: 'one' as const, name: 'Team Aurora', color: '#9a348e', score: 0, connected: false, controllerCount: 0, roster: [] },
+  two: { id: 'two' as const, name: 'Team Comet', color: '#1b9cc9', score: 0, connected: false, controllerCount: 0, roster: [] },
 };
 
 interface InternalController extends ControllerSession { socketId: string | null; inviteToken: string; }
@@ -44,7 +44,7 @@ export class GameEngine {
   private skipVotes = new Set<string>();
   private individualBuzzResponseMs = 0;
 
-  constructor(private readonly onState: (state: PublicGameState) => void) {}
+  constructor(private readonly onState: (state: PublicGameState) => void, private readonly onQuestionShown: (questionId: string) => void = () => undefined, private readonly onQuestionAnswered: (difficulty: Difficulty) => void = () => undefined) {}
 
   snapshot(): PublicGameState { this.syncRemaining(); return structuredClone(this.state); }
 
@@ -256,13 +256,14 @@ export class GameEngine {
     this.state.remainingMs = this.state.timerSeconds * 1000; this.state.resolutionRemainingMs = 0; this.state.buzzDelayRemainingMs = 0;
     this.state.buzzedTeam = null; this.state.answeringTeam = null; this.state.buzzedPlayerId = null; this.state.answeringPlayerId = null;
     this.state.wrongAnswerIds = []; this.state.controllerFeedback = { solo: null, one: null, two: null, individual: null };
-    this.state.individualFeedback = {}; this.state.result = null; this.state.pausedMessage = null; this.clearSkipVotes(); this.startQuestionTimer();
+    this.state.individualFeedback = {}; this.state.result = null; this.state.pausedMessage = null; this.clearSkipVotes(); this.onQuestionShown(question.id); this.startQuestionTimer();
   }
 
   private resolve(selectedAnswerId: string | null, teamId: TeamId | null, reason: 'correct' | 'incorrect' | 'timeout' | 'skipped'): void {
     if (!['question', 'answering', 'steal'].includes(this.state.phase)) throw new Error('This question has already been resolved.');
     const question = this.currentQuestion(); this.stopAllTimers(); this.clearSkipVotes(); this.state.phase = 'resolved'; this.state.answeringTeam = null; this.state.answeringPlayerId = null; this.state.buzzDelayRemainingMs = 0;
-    this.state.result = { selectedAnswerId, correctAnswerId: question.correctAnswerId, teamId, reason }; this.state.resolutionRemainingMs = 5_000; this.startResolutionTimer();
+    this.state.result = { selectedAnswerId, correctAnswerId: question.correctAnswerId, teamId, reason };
+    if (reason === 'correct' || reason === 'incorrect') this.onQuestionAnswered(question.difficulty); this.state.resolutionRemainingMs = 5_000; this.startResolutionTimer();
   }
 
   private advanceQuestion(): void {

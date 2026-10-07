@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type {
+  AnsweredStats,
   ControllerInvite,
   ControllerRole,
   ControllerSession,
@@ -13,14 +14,15 @@ import { emitWithAck, socket } from './socket';
 import { TeamSpinner } from './Spinner';
 import { parseQuestionCountDraft } from './settings';
 import { ColorPicker } from './ColorPicker';
+import { StatsPanel } from './StatsPanel';
 
 const DEFAULT_SETTINGS: GameSettings = {
   mode: 'free',
   questionCount: 10,
   timerSeconds: 30,
   teams: {
-    one: { name: 'Team Aurora', color: '#8b5cf6', roster: [] },
-    two: { name: 'Team Comet', color: '#14b8a6', roster: [] },
+    one: { name: 'Team Aurora', color: '#9a348e', roster: [] },
+    two: { name: 'Team Comet', color: '#1b9cc9', roster: [] },
   },
 };
 
@@ -86,6 +88,7 @@ function HostApp() {
   const [error, setError] = useState('');
   const [useSpinner, setUseSpinner] = useState(false);
   const [namesText, setNamesText] = useState('');
+  const [stats, setStats] = useState<AnsweredStats>({ easy: 0, medium: 0, hard: 0 });
   const [spinnerTeams, setSpinnerTeams] = useState({ one: [] as string[], two: [] as string[] });
   const questionCountError = parseQuestionCountDraft(questionCountDraft) === null
     ? 'Enter a whole number from 1 to 50.'
@@ -109,6 +112,15 @@ function HostApp() {
       })
       .catch(() => undefined);
   }, []);
+
+  const inSetup = state?.phase === 'setup';
+  useEffect(() => {
+    if (!inSetup) return;
+    fetch('/api/stats')
+      .then((response) => response.json())
+      .then((data: AnsweredStats) => setStats(data))
+      .catch(() => undefined);
+  }, [inSetup]);
 
   const names = useMemo(() => namesText.split(/\n|,/).map((name) => name.trim()).filter(Boolean), [namesText]);
   const duplicates = useMemo(() => {
@@ -175,12 +187,13 @@ function HostApp() {
 
   return (
     <main className="app-shell">
-      <header className="brand"><div className="brand-mark">?</div><span>Living Room Trivia</span></header>
+      <header className="brand"><div className="brand-mark">?</div><span>Doty Street Trivia</span></header>
       {state.phase !== 'setup' && <button className="exit-button" onClick={exitGame} aria-label="Exit game">Exit ×</button>}
       {error && <div className="error-banner" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>×</button></div>}
       {state.phase === 'setup' && (
         <SetupScreen
           settings={settings}
+          stats={stats}
           questionCountDraft={questionCountDraft}
           setQuestionCountDraft={setQuestionCountDraft}
           questionCountError={questionCountError}
@@ -221,6 +234,7 @@ function HostApp() {
 
 interface SetupProps {
   settings: GameSettings;
+  stats: AnsweredStats;
   questionCountDraft: string;
   setQuestionCountDraft: (value: string) => void;
   questionCountError: string;
@@ -242,12 +256,7 @@ function SetupScreen(props: SetupProps) {
   const [openColor, setOpenColor] = useState<TeamId | null>(null);
   return (
     <div className="setup-layout">
-      <section className="hero-copy">
-        <span className="eyebrow">Tonight’s main event</span>
-        <h1>Turn your living room into a game show.</h1>
-        <p>Fresh questions, quick thinking, and phone-powered buzzers. No accounts. No fuss.</p>
-        <div className="feature-row"><span>◆ Live buzzers</span><span>◆ 10 categories</span><span>◆ Instant setup</span></div>
-      </section>
+      <StatsPanel stats={props.stats} />
       <section className="setup-card">
         <h2>Set up your game</h2>
         <fieldset className="mode-picker">
@@ -315,7 +324,7 @@ function Lobby({ state, invites, baseUrl, setBaseUrl, onBegin, onLockRoster, onU
         const url = invite ? `${baseUrl}/controller?role=${role}&token=${encodeURIComponent(invite.token)}` : '';
         const team = role === 'one' || role === 'two' ? state.teams[role] : null;
         const connected = role === 'solo' ? state.soloConnected : role === 'individual' ? connectedPlayers > 0 : team!.connected;
-        return <article key={role} className="qr-card" style={{ '--team': team?.color ?? '#22d3ee' } as React.CSSProperties}>
+        return <article key={role} className="qr-card" style={{ '--team': team?.color ?? '#63d2ff' } as React.CSSProperties}>
           <h2>{team?.name ?? (role === 'individual' ? 'Join the game' : 'Solo controller')}</h2>{url ? <QRCodeSVG value={url} size={190} marginSize={2} /> : <div className="qr-placeholder">Reopen the host page to recover controller links.</div>}
           <div className={`connection ${connected ? 'online' : ''}`}><span />{role === 'individual' ? `${connectedPlayers} of 12 players joined` : team ? `${team.controllerCount} phone${team.controllerCount === 1 ? '' : 's'} connected` : connected ? 'Connected' : 'Phone is optional'}</div>
           {team && team.roster.length > 0 && <p className="roster-line">{team.roster.join(' · ')}</p>}
@@ -454,7 +463,7 @@ function ControllerApp({ role, token }: { role: ControllerRole; token: string })
   const connected = isSolo ? state.soloConnected : isTeam ? team!.connected : state.individualPlayers.find((player) => player.id === session.playerId)?.connected ?? false;
   const currentPlayer = isIndividual ? state.individualPlayers.find((player) => player.id === session.playerId) : null;
   const answeringName = state.individualPlayers.find((player) => player.id === state.answeringPlayerId)?.name;
-  return <main className="controller-shell" style={{ '--team': team?.color ?? '#22d3ee' } as React.CSSProperties}>
+  return <main className="controller-shell" style={{ '--team': team?.color ?? '#63d2ff' } as React.CSSProperties}>
     <header><div className="brand-mark">?</div><div><small>{isSolo ? 'Free Play' : isIndividual ? 'Playing as' : 'You’re playing for'}</small><strong>{team?.name ?? session.name ?? 'Solo controller'}</strong></div>{team && <b>{team.score}</b>}</header>
     {error && <div className="error-banner" role="alert">{error}</div>}
     <section className="controller-content">

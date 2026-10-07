@@ -14,6 +14,8 @@ export type GamePhase =
   | 'paused'
   | 'complete';
 
+export type AnsweredStats = Record<Difficulty, number>;
+
 export interface AnswerOption {
   id: string;
   text: string;

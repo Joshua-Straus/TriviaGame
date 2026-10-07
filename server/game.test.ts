@@ -73,4 +73,20 @@ describe('GameEngine multiplayer stability', () => {
   it('free play remains scoreless and auto-advances after five seconds', () => {
     vi.useFakeTimers(); const engine = prepare('free', 2); join(engine, 'solo', 'solo'); engine.begin(); engine.controllerAnswer('solo', 'a', 'a:correct'); expect(engine.snapshot().teams.one.score).toBe(0); vi.advanceTimersByTime(5_100); expect(engine.snapshot()).toMatchObject({ phase: 'question', questionIndex: 1 });
   });
+
+  it('reports each question only when it is shown on screen', () => {
+    vi.useFakeTimers(); const shown: string[] = []; const engine = new GameEngine(() => undefined, (id) => shown.push(id)); engines.push(engine);
+    const invites = engine.prepare(settings('free', 3), [q('a'), q('b'), q('c')], 'host-socket'); expect(shown).toEqual([]);
+    engine.joinController({ role: 'solo', token: invites[0].token, deviceId: 'd' }, 'solo'); engine.begin(); expect(shown).toEqual(['a']);
+    engine.controllerAnswer('solo', 'a', 'a:correct'); vi.advanceTimersByTime(5_100); expect(shown).toEqual(['a', 'b']);
+  });
+
+  it('reports answered difficulty only for correct or incorrect resolutions', () => {
+    vi.useFakeTimers(); const answered: string[] = []; const engine = new GameEngine(() => undefined, undefined, (difficulty) => answered.push(difficulty)); engines.push(engine);
+    const invites = engine.prepare(settings('free', 3), [q('a'), q('b'), q('c')], 'host-socket');
+    engine.joinController({ role: 'solo', token: invites[0].token, deviceId: 'd' }, 'solo'); engine.begin();
+    engine.controllerAnswer('solo', 'a', 'a:correct'); expect(answered).toEqual(['easy']); vi.advanceTimersByTime(5_100);
+    engine.controllerAnswer('solo', 'b', 'b:wrong'); expect(answered).toEqual(['easy', 'easy']); vi.advanceTimersByTime(5_100);
+    vi.advanceTimersByTime(31_000); expect(answered).toHaveLength(2);
+  });
 });

@@ -29,14 +29,17 @@
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
     "@types/express": "latest",
-    "@types/node": "latest",
+    "@types/node": "^26.6.4",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "concurrently": "latest",
+    "concurrently": "^9.2.1",
     "jsdom": "latest",
     "tsx": "latest",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "latest"
+  },
+  "overrides": {
+    "shell-quote": "^1.12.0"
   }
 }

@@ -6,13 +6,17 @@ import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, ControllerRole, ServerToClientEvents, StoredQuestion } from '../shared/types.js';
 import { GameEngine } from './game.js';
+import { SeenQuestionStore } from './seenStore.js';
+import { StatsStore } from './statsStore.js';
 import { fetchTriviaQuestions, parseQuestionLimit } from './trivia.js';
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, { cors: { origin: true } });
 const questionCache = new Map<string, StoredQuestion>();
-const engine = new GameEngine((state) => io.emit('state', state));
+const seenQuestions = new SeenQuestionStore(path.resolve(process.cwd(), 'data/seen-questions.json'));
+const stats = new StatsStore(path.resolve(process.cwd(), 'data/stats.json'));
+const engine = new GameEngine((state) => io.emit('state', state), (questionId) => seenQuestions.add(questionId), (difficulty) => stats.record(difficulty));
 
 app.use(express.json());
 
@@ -24,11 +28,13 @@ app.get('/api/network', (_request, response) => {
   response.json({ addresses });
 });
 
+app.get('/api/stats', (_request, response) => { response.json(stats.snapshot()); });
+
 app.get('/api/questions', async (request, response) => {
   const rawLimit = Array.isArray(request.query.limit) ? request.query.limit[0] : request.query.limit;
   try {
     const limit = parseQuestionLimit(rawLimit);
-    const questions = await fetchTriviaQuestions(limit);
+    const questions = await fetchTriviaQuestions(limit, seenQuestions);
     for (const question of questions) questionCache.set(question.id, question);
     response.json(
       questions.map(({ correctAnswerId: _correctAnswerId, ...safeQuestion }) => safeQuestion),

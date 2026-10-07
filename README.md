@@ -1,4 +1,4 @@
-# Living Room Trivia
+# Doty Street Trivia
 
 A local, TV-friendly trivia game with a relaxed free-play mode, an optional solo phone controller, and real-time phone buzzers for two-team play. Questions come from [The Trivia API](https://the-trivia-api.com/); no API key or database is required.
 

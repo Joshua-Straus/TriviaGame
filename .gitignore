@@ -4,3 +4,7 @@ server-dist
 coverage
 .DS_Store
 *.log
+data/seen-questions.json
+data/seen-questions.json.tmp
+data/stats.json
+data/stats.json.tmp

@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { Difficulty, StoredQuestion } from '../shared/types.js';
+import type { SeenQuestions } from './seenStore.js';
 
 interface ApiQuestion {
   id?: unknown;
@@ -57,7 +58,15 @@ export function normalizeTriviaQuestions(payload: unknown): StoredQuestion[] {
   });
 }
 
-export async function fetchTriviaQuestions(limit: number): Promise<StoredQuestion[]> {
+const MAX_API_LIMIT = 50;
+const EXTRA_REQUESTED = 10;
+const MAX_ATTEMPTS = 3;
+
+function textKey(question: StoredQuestion): string {
+  return question.question.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+async function requestQuestions(limit: number): Promise<StoredQuestion[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -69,11 +78,7 @@ export async function fetchTriviaQuestions(limit: number): Promise<StoredQuestio
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`Trivia service responded with status ${response.status}.`);
-    const questions = normalizeTriviaQuestions(await response.json());
-    if (questions.length < limit) {
-      throw new Error(`Only ${questions.length} of ${limit} requested questions were available. Try again.`);
-    }
-    return questions.slice(0, limit);
+    return normalizeTriviaQuestions(await response.json());
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('The trivia service took too long to respond. Try again.');
@@ -82,6 +87,35 @@ export async function fetchTriviaQuestions(limit: number): Promise<StoredQuestio
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Fetches `limit` distinct questions. Duplicates (by id or wording) are dropped, and questions
+ * already in `seen` are avoided where possible. Nothing is recorded here; callers mark
+ * questions as seen only once they are actually shown.
+ */
+export async function fetchTriviaQuestions(limit: number, seen?: SeenQuestions): Promise<StoredQuestion[]> {
+  const unique = new Map<string, StoredQuestion>();
+  const texts = new Set<string>();
+  const isFresh = (question: StoredQuestion) => !seen?.has(question.id);
+  const freshCount = () => [...unique.values()].filter(isFresh).length;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && freshCount() < limit; attempt += 1) {
+    const batch = await requestQuestions(Math.min(MAX_API_LIMIT, limit + EXTRA_REQUESTED));
+    for (const question of batch) {
+      const key = textKey(question);
+      if (unique.has(question.id) || texts.has(key)) continue;
+      unique.set(question.id, question);
+      texts.add(key);
+    }
+  }
+
+  if (unique.size < limit) {
+    throw new Error(`Only ${unique.size} of ${limit} requested questions were available. Try again.`);
+  }
+  // Prefer unseen questions; fall back to previously seen ones only if the pool is running dry.
+  const all = [...unique.values()];
+  return [...all.filter(isFresh), ...all.filter((question) => !isFresh(question))].slice(0, limit);
 }
 
 export function parseQuestionLimit(value: unknown): number {

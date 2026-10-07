@@ -6,12 +6,19 @@ interface Props {
   onChange: (teams: { one: string[]; two: string[] }) => void;
 }
 
-const COLORS = ['#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#22c55e', '#eab308'];
+const COLORS = ['#9a348e', '#1783a8', '#0f6e74', '#c0559f', '#2a9d8f', '#6c2564'];
 
 function randomIndex(length: number): number {
   const values = new Uint32Array(1);
   crypto.getRandomValues(values);
   return values[0] % length;
+}
+
+// Labels run along the radius. Where that would leave the text upside down once the wheel
+// comes to rest, read it inward instead so names are always upright.
+function labelFlipped(segmentAngle: number, rotation: number): boolean {
+  const resting = (((segmentAngle + rotation) % 360) + 360) % 360;
+  return resting > 180;
 }
 
 export function TeamSpinner({ names, onChange }: Props) {
@@ -33,7 +40,7 @@ export function TeamSpinner({ names, onChange }: Props) {
   }, [names]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wheel = useMemo(() => {
-    if (!remaining.length) return 'conic-gradient(#24234c 0deg 360deg)';
+    if (!remaining.length) return 'conic-gradient(#c9d9d2 0deg 360deg)';
     const segment = 360 / remaining.length;
     return `conic-gradient(${remaining.map((_, index) => `${COLORS[index % COLORS.length]} ${index * segment}deg ${(index + 1) * segment}deg`).join(',')})`;
   }, [remaining]);
@@ -92,7 +99,8 @@ export function TeamSpinner({ names, onChange }: Props) {
         <div className="wheel" style={{ background: wheel, transform: `rotate(${rotation}deg)` }}>
           {remaining.map((name, index) => {
             const angle = (360 / remaining.length) * index + 360 / remaining.length / 2;
-            return <span key={name} style={{ transform: `rotate(${angle}deg) translateY(-39%)` }}>{name}</span>;
+            const flipped = labelFlipped(angle, rotation);
+            return <span key={name} className={flipped ? 'flipped' : ''} style={{ transform: `rotate(${angle + (flipped ? 90 : -90)}deg)`, fontSize: remaining.length > 8 ? 9 : 11 }}>{name}</span>;
           })}
         </div>
         <div className="wheel-target">{remaining.length ? `Next: Team ${target === 'one' ? '1' : '2'}` : 'Done!'}</div>
